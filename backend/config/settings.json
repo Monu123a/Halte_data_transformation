@@ -1,0 +1,54 @@
+{
+  "file_detection": {
+    "b2b_identifier_column": "buyer-tax-registration-id"
+  },
+  "mapping_engine": {
+    "amazon_to_internal": {
+      "invoice-id": "invoice_number",
+      "transaction-type": "transaction_type",
+      "sku": "sku",
+      "ship-state": "state",
+      "ship-city": "city",
+      "buyer-tax-registration-id": "buyer_gst",
+      "Principal Amount": "principal_amount",
+      "Cgst Tax": "cgst_tax",
+      "Sgst Tax": "sgst_tax",
+      "Igst Tax": "igst_tax",
+      "Utgst Tax": "utgst_tax",
+      "Compensatory Cess Tax": "cess_tax",
+      "Shipping Amount": "shipping_amount"
+    },
+    "internal_to_logic_erp": {
+      "invoice_number": "Voucher No",
+      "account_code": "Account Code",
+      "sku": "Item Name",
+      "principal_amount": "Gross Amount",
+      "cgst_tax": "CGST Amount",
+      "sgst_tax": "SGST Amount",
+      "igst_tax": "IGST Amount",
+      "shipping_amount": "Shipping Charge",
+      "mem_ship": "MEM SHIP",
+      "tax_region": "TAX REGION"
+    }
+  },
+  "transformation_rules": {
+    "allowed_transaction_types": [
+      "Shipment"
+    ],
+    "invoice_prefixes": [
+      "VSHB",
+      "IN"
+    ],
+    "allowed_states": [
+      "Chandigarh"
+    ],
+    "sku_trim_length": 6,
+    "defaults": {
+      "mem_ship": "Standard",
+      "tax_region": "Local"
+    }
+  },
+  "audit": {
+    "retention_days": 30
+  }
+}

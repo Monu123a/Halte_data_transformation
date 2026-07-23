@@ -1,0 +1,310 @@
+import json
+import logging
+import os
+import shutil
+import time
+from datetime import datetime
+from typing import List
+
+import pandas as pd
+from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from pydantic import BaseModel
+
+from app.models.context import ExecutionContext, LogLevel, TransformationWarning
+from app.repositories.config_repository import ConfigRepository
+from app.repositories.lookup_repository import LookupRepository
+from app.engines.transformation import TransformationEngine
+from app.engines.validation import ValidationEngine
+from app.plugins.plugin_registry import PluginRegistry
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logger = logging.getLogger("amazon_logic_transformer")
+
+# ---------------------------------------------------------------------------
+# Paths
+# ---------------------------------------------------------------------------
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PROJECT_ROOT = os.path.dirname(BASE_DIR)
+CONFIG_DIR = os.path.join(PROJECT_ROOT, "config")
+UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
+OUTPUT_DIR = os.path.join(BASE_DIR, "outputs")
+LOGS_DIR = os.path.join(BASE_DIR, "logs")
+LOOKUP_DIR = os.path.join(PROJECT_ROOT, "")
+
+for d in (UPLOAD_DIR, OUTPUT_DIR, LOGS_DIR):
+    os.makedirs(d, exist_ok=True)
+
+# ---------------------------------------------------------------------------
+# Repositories & engines
+# ---------------------------------------------------------------------------
+config_repo = ConfigRepository(config_dir=CONFIG_DIR)
+lookup_repo = LookupRepository(base_dir=LOOKUP_DIR)
+plugin_registry = PluginRegistry()
+transformation_engine = TransformationEngine(registry=plugin_registry)
+validation_engine = ValidationEngine()
+
+# ---------------------------------------------------------------------------
+# FastAPI
+# ---------------------------------------------------------------------------
+app = FastAPI(title="Amazon Logic Transformer", version="1.0.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# ---------------------------------------------------------------------------
+# Pydantic response models
+# ---------------------------------------------------------------------------
+class UploadResponse(BaseModel):
+    files: list
+    message: str
+
+
+class StatsResponse(BaseModel):
+    rows_read: int = 0
+    rows_processed: int = 0
+    rows_removed: int = 0
+    rows_failed: int = 0
+    duplicate_invoices: int = 0
+    missing_gst: int = 0
+    missing_account_code: int = 0
+    execution_time_ms: float = 0.0
+
+
+class TransformResponse(BaseModel):
+    output_filename: str = ""
+    stats: StatsResponse
+    warnings: list
+    message: str = ""
+
+
+class DryRunResponse(BaseModel):
+    preview_data: list
+    preview_columns: list
+    stats: StatsResponse
+    warnings: list
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+def _build_context() -> ExecutionContext:
+    mapping = config_repo.load_mapping()
+    rules = config_repo.load_rules()
+    lookups_cfg = config_repo.load_lookups_config()
+
+    # Load Excel lookup tables
+    loaded_lookups = {}
+    for key, path in lookups_cfg.items():
+        full_path = os.path.join(LOOKUP_DIR, path)
+        if os.path.exists(full_path):
+            try:
+                df = pd.read_excel(full_path, header=2)
+                # Clean column names
+                df.columns = df.columns.str.strip()
+                # Drop fully-empty rows
+                df = df.dropna(how="all")
+                loaded_lookups[key] = df
+                logger.info("Loaded lookup '%s' with %d rows.", key, len(df))
+            except Exception as exc:
+                logger.error("Failed to load lookup %s: %s", path, exc)
+
+    return ExecutionContext(mapping=mapping, rules=rules, lookups=loaded_lookups)
+
+
+def _read_uploaded_files(filenames: List[str]) -> pd.DataFrame:
+    frames = []
+    for fname in filenames:
+        path = os.path.join(UPLOAD_DIR, fname)
+        if not os.path.exists(path):
+            raise HTTPException(status_code=404, detail=f"File not found: {fname}")
+        df = pd.read_excel(path)
+        frames.append(df)
+    if not frames:
+        raise HTTPException(status_code=400, detail="No files to process.")
+    return pd.concat(frames, ignore_index=True)
+
+
+def _save_manifest(context: ExecutionContext, filenames: List[str], output_filename: str):
+    run_id = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    run_dir = os.path.join(LOGS_DIR, run_id)
+    os.makedirs(run_dir, exist_ok=True)
+
+    manifest = {
+        "run_id": run_id,
+        "input_files": filenames,
+        "output_file": output_filename,
+        "mapping_version": "1.0",
+        "rules_version": "1.0",
+        "lookup_version": "1.0",
+        "stats": context.statistics.model_dump(),
+        "warnings": [w.model_dump() for w in context.warnings],
+    }
+    with open(os.path.join(run_dir, "manifest.json"), "w") as f:
+        json.dump(manifest, f, indent=2, default=str)
+
+    # Save config snapshot
+    shutil.copy(os.path.join(CONFIG_DIR, "rules.json"), os.path.join(run_dir, "rules.json"))
+    shutil.copy(os.path.join(CONFIG_DIR, "mapping.json"), os.path.join(run_dir, "mapping.json"))
+
+    logger.info("Manifest saved to %s", run_dir)
+
+
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
+@app.get("/")
+def health_check():
+    return {"status": "ok", "message": "Amazon Logic Transformer is running."}
+
+
+@app.post("/api/upload")
+async def upload_files(files: List[UploadFile] = File(...)):
+    """Upload one or more Excel files."""
+    uploaded = []
+    for f in files:
+        if not f.filename.endswith((".xlsx", ".xls")):
+            raise HTTPException(status_code=400, detail=f"Unsupported file type: {f.filename}")
+        dest = os.path.join(UPLOAD_DIR, f.filename)
+        with open(dest, "wb") as out:
+            content = await f.read()
+            out.write(content)
+        uploaded.append({"name": f.filename, "size": len(content)})
+        logger.info("Uploaded: %s (%d bytes)", f.filename, len(content))
+    return UploadResponse(files=uploaded, message=f"{len(uploaded)} file(s) uploaded.")
+
+
+@app.post("/api/transform")
+async def transform(body: dict):
+    """Run the full transformation pipeline and generate the output Excel."""
+    filenames = body.get("filenames", [])
+    if not filenames:
+        raise HTTPException(status_code=400, detail="No filenames provided.")
+
+    context = _build_context()
+    context.current_data = _read_uploaded_files(filenames)
+
+    # Run pipeline
+    transformation_engine.execute_pipeline(context)
+
+    # Run validation (before column mapper removes some columns)
+    # Note: validation runs on the already-transformed data
+    validation_engine.validate(context)
+
+    # Generate output filename
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_filename = f"logic_erp_output_{ts}.xlsx"
+    output_path = os.path.join(OUTPUT_DIR, output_filename)
+
+    if context.current_data is not None:
+        context.current_data.to_excel(output_path, index=False, engine="openpyxl")
+        logger.info("Output saved: %s (%d rows)", output_path, len(context.current_data))
+
+    _save_manifest(context, filenames, output_filename)
+
+    return TransformResponse(
+        output_filename=output_filename,
+        stats=StatsResponse(**context.statistics.model_dump()),
+        warnings=[w.model_dump() for w in context.warnings],
+        message="Transformation completed successfully.",
+    )
+
+
+@app.post("/api/dry-run")
+async def dry_run(body: dict):
+    """Run the pipeline without saving – return preview and stats."""
+    filenames = body.get("filenames", [])
+    if not filenames:
+        raise HTTPException(status_code=400, detail="No filenames provided.")
+
+    context = _build_context()
+    context.current_data = _read_uploaded_files(filenames)
+
+    transformation_engine.execute_pipeline(context)
+    validation_engine.validate(context)
+
+    preview = []
+    columns = []
+    if context.current_data is not None and not context.current_data.empty:
+        preview_df = context.current_data.head(25).fillna("")
+        columns = preview_df.columns.tolist()
+        preview = preview_df.astype(str).values.tolist()
+
+    return DryRunResponse(
+        preview_data=preview,
+        preview_columns=columns,
+        stats=StatsResponse(**context.statistics.model_dump()),
+        warnings=[w.model_dump() for w in context.warnings],
+    )
+
+
+@app.get("/api/download/{filename}")
+async def download_file(filename: str):
+    """Download a generated output file."""
+    path = os.path.join(OUTPUT_DIR, filename)
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="File not found.")
+    return FileResponse(
+        path=path,
+        filename=filename,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+@app.get("/api/config")
+async def get_config():
+    """Return the current configuration (mapping + rules + lookups)."""
+    return {
+        "mapping": config_repo.load_mapping(),
+        "rules": config_repo.load_rules(),
+        "lookups": config_repo.load_lookups_config(),
+    }
+
+
+@app.put("/api/config")
+async def update_config(body: dict):
+    """Update configuration files."""
+    if "mapping" in body:
+        config_repo.save_mapping(body["mapping"])
+    if "rules" in body:
+        config_repo.save_rules(body["rules"])
+    if "lookups" in body:
+        config_repo.save_lookups_config(body["lookups"])
+    return {"status": "ok", "message": "Configuration updated."}
+
+
+@app.get("/api/uploaded-files")
+async def list_uploaded_files():
+    """List files currently in the uploads directory."""
+    files = []
+    if os.path.exists(UPLOAD_DIR):
+        for f in os.listdir(UPLOAD_DIR):
+            fp = os.path.join(UPLOAD_DIR, f)
+            if os.path.isfile(fp):
+                files.append({"name": f, "size": os.path.getsize(fp)})
+    return {"files": files}
+
+
+@app.delete("/api/reset")
+async def reset():
+    """Clear uploads and outputs."""
+    for d in (UPLOAD_DIR, OUTPUT_DIR):
+        if os.path.exists(d):
+            shutil.rmtree(d)
+            os.makedirs(d)
+    return {"status": "ok", "message": "All uploads and outputs cleared."}
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
