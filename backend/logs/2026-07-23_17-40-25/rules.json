@@ -4,7 +4,6 @@
     "InvoiceFilter",
     "LocationFilter",
     "SkuTrim",
-    "SkuMasterMapper",
     "AccountCodeMapper",
     "DefaultInjector",
     "ColumnMapper"
@@ -25,14 +24,6 @@
   "SkuTrim": {
     "enabled": true,
     "length": 6
-  },
-  "SkuMasterMapper": {
-    "enabled": true,
-    "master_key": "SKU",
-    "amazon_key": "Sku",
-    "fields_to_map": {
-      "GST %": "GST Slab"
-    }
   },
   "LocationFilter": {
     "enabled": true,

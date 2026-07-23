@@ -34,7 +34,7 @@ CONFIG_DIR = os.path.join(PROJECT_ROOT, "config")
 UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
 OUTPUT_DIR = os.path.join(BASE_DIR, "outputs")
 LOGS_DIR = os.path.join(BASE_DIR, "logs")
-LOOKUP_DIR = os.path.join(PROJECT_ROOT, "")
+LOOKUP_DIR = os.path.join(BASE_DIR, "lookup_tables")
 
 for d in (UPLOAD_DIR, OUTPUT_DIR, LOGS_DIR):
     os.makedirs(d, exist_ok=True)
@@ -109,7 +109,10 @@ def _build_context() -> ExecutionContext:
         full_path = os.path.join(LOOKUP_DIR, path)
         if os.path.exists(full_path):
             try:
-                df = pd.read_excel(full_path, header=2)
+                if key == "account_lookup":
+                    df = pd.read_excel(full_path, header=2)
+                else:
+                    df = pd.read_excel(full_path)
                 # Clean column names
                 df.columns = df.columns.str.strip()
                 # Drop fully-empty rows
