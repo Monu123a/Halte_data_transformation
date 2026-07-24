@@ -6,7 +6,7 @@ import ConfigPanel from './components/ConfigPanel';
 import StatusPanel from './components/StatusPanel';
 import PreviewPanel from './components/PreviewPanel';
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API = import.meta.env.VITE_API_URL || 'https://halte-data-transformation.onrender.com';
 
 export default function App() {
   const [uploadedFiles, setUploadedFiles] = useState([]);
