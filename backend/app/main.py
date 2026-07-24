@@ -55,8 +55,8 @@ app = FastAPI(title="Amazon Logic Transformer", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -83,6 +83,7 @@ class StatsResponse(BaseModel):
 
 class TransformResponse(BaseModel):
     output_filename: str = ""
+    audit_filename: str = ""
     stats: StatsResponse
     warnings: list
     message: str = ""
@@ -163,6 +164,27 @@ def _save_manifest(context: ExecutionContext, filenames: List[str], output_filen
     logger.info("Manifest saved to %s", run_dir)
 
 
+def _save_audit_report(context: ExecutionContext, ts: str) -> str:
+    if not context.warnings:
+        return ""
+    
+    data = []
+    for w in context.warnings:
+        data.append({
+            "Level": w.level.value if hasattr(w.level, "value") else str(w.level),
+            "Message": w.message,
+            "Row Index": w.row_index if w.row_index is not None else "",
+            "Column": w.column if w.column is not None else ""
+        })
+    
+    df = pd.DataFrame(data)
+    audit_filename = f"audit_report_{ts}.xlsx"
+    audit_path = os.path.join(OUTPUT_DIR, audit_filename)
+    df.to_excel(audit_path, index=False, engine="openpyxl")
+    logger.info("Audit report saved: %s", audit_path)
+    return audit_filename
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -213,10 +235,13 @@ async def transform(body: dict):
         context.current_data.to_excel(output_path, index=False, engine="openpyxl")
         logger.info("Output saved: %s (%d rows)", output_path, len(context.current_data))
 
+    audit_filename = _save_audit_report(context, ts)
+
     _save_manifest(context, filenames, output_filename)
 
     return TransformResponse(
         output_filename=output_filename,
+        audit_filename=audit_filename,
         stats=StatsResponse(**context.statistics.model_dump()),
         warnings=[w.model_dump() for w in context.warnings],
         message="Transformation completed successfully.",
