@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import './UploadPanel.css';
 
-const API = 'http://localhost:8000';
+const API = import.meta.env.VITE_API_URL || 'https://halte-data-transformation.onrender.com';
 
 export default function UploadPanel({ uploadedFiles, setUploadedFiles }) {
   const inputRef = useRef(null);

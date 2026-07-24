@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import './ConfigPanel.css';
 
-const API = 'http://localhost:8000';
+const API = import.meta.env.VITE_API_URL || 'https://halte-data-transformation.onrender.com';
 
 export default function ConfigPanel() {
   const [open, setOpen] = useState(false);
@@ -40,7 +40,16 @@ export default function ConfigPanel() {
     setSaving(false);
   };
 
-  if (!rules) return null;
+  if (!rules) {
+    return (
+      <div className="card config-panel">
+        <div className="card-title">⚙️ Configuration</div>
+        <div style={{ padding: 15, fontSize: 13, color: '#94a3b8' }}>
+          Connecting to backend server... (If server is waking up, please wait a few seconds)
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="card config-panel">
