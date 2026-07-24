@@ -6,7 +6,7 @@ import ConfigPanel from './components/ConfigPanel';
 import StatusPanel from './components/StatusPanel';
 import PreviewPanel from './components/PreviewPanel';
 
-const API = 'http://localhost:8000';
+const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 export default function App() {
   const [uploadedFiles, setUploadedFiles] = useState([]);
@@ -15,6 +15,7 @@ export default function App() {
   const [previewCols, setPreviewCols] = useState([]);
   const [previewData, setPreviewData] = useState([]);
   const [outputFile, setOutputFile] = useState('');
+  const [auditFile, setAuditFile] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
@@ -36,6 +37,7 @@ export default function App() {
       setStats(data.stats);
       setWarnings(data.warnings || []);
       setOutputFile(data.output_filename || '');
+      setAuditFile(data.audit_filename || '');
       setSuccess(true);
     } catch (err) {
       setWarnings([{ level: 'CRITICAL', message: 'Transform request failed: ' + err.message }]);
@@ -75,6 +77,16 @@ export default function App() {
     document.body.removeChild(a);
   };
 
+  const handleDownloadAudit = () => {
+    if (!auditFile) return;
+    const a = document.createElement('a');
+    a.href = `${API}/api/download/${auditFile}`;
+    a.download = auditFile;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
   const handleReset = async () => {
     try { await fetch(`${API}/api/reset`, { method: 'DELETE' }); } catch {}
     setUploadedFiles([]);
@@ -83,6 +95,7 @@ export default function App() {
     setPreviewCols([]);
     setPreviewData([]);
     setOutputFile('');
+    setAuditFile('');
     setSuccess(false);
   };
 
@@ -118,6 +131,14 @@ export default function App() {
         >
           📥 Download Output
         </button>
+        {auditFile && (
+          <button
+            className="btn btn-warning"
+            onClick={handleDownloadAudit}
+          >
+            📋 Download Audit Report
+          </button>
+        )}
         <button className="btn btn-danger" onClick={handleReset}>
           🗑 Reset
         </button>
