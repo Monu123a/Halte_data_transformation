@@ -50,12 +50,14 @@ class TransformationService:
 
         audit_filename = self._save_audit_report(context, ts)
         req_filename = self._generate_product_requirement_report(context)
+        dup_filename = self._generate_duplicate_orders_report(context, ts)
         self._save_manifest(context, filenames, output_filename)
 
         result_dict = {
             "output_filename": output_filename,
             "audit_filename": audit_filename,
             "requirement_filename": req_filename,
+            "duplicate_filename": dup_filename,
             "stats": context.statistics.model_dump(),
             "warnings": [w.model_dump() for w in context.warnings],
             "message": "Transformation completed successfully.",
@@ -128,6 +130,30 @@ class TransformationService:
         logger.info("Product requirement report saved: %s", req_path)
         
         return req_filename
+
+    def _generate_duplicate_orders_report(self, context: ExecutionContext, ts: str) -> str:
+        if context.current_data is None or context.current_data.empty:
+            return ""
+            
+        df = context.current_data
+        col = "Invoice Number"
+        if col not in df.columns:
+            return ""
+            
+        dup_mask = df.duplicated(subset=[col], keep=False)
+        dup_count = dup_mask.sum()
+        
+        if dup_count == 0:
+            return ""
+            
+        dup_df = df[dup_mask].copy()
+        
+        dup_filename = f"Duplicate_Orders_{ts}.xlsx"
+        dup_path = os.path.join(self.output_dir, dup_filename)
+        dup_df.to_excel(dup_path, index=False, engine='openpyxl')
+        logger.info("Duplicate orders report saved: %s", dup_path)
+        
+        return dup_filename
 
     def _save_manifest(self, context: ExecutionContext, filenames: List[str], output_filename: str):
         run_id = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")

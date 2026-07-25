@@ -98,6 +98,7 @@ class TransformResponse(BaseModel):
     output_filename: str = ""
     audit_filename: str = ""
     requirement_filename: str = ""
+    duplicate_filename: str = ""
     stats: StatsResponse
     warnings: list
     message: str = ""

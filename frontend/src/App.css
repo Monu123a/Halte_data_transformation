@@ -179,6 +179,39 @@ body {
   border-color: var(--error);
 }
 
+.btn-warning {
+  background: linear-gradient(135deg, var(--warning), #d97706);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 4px 15px var(--warning-glow);
+}
+
+.btn-warning:hover:not(:disabled) {
+  box-shadow: 0 6px 25px var(--warning-glow);
+}
+
+.btn-info {
+  background: linear-gradient(135deg, var(--info), #2563eb);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 4px 15px var(--info-glow);
+}
+
+.btn-info:hover:not(:disabled) {
+  box-shadow: 0 6px 25px var(--info-glow);
+}
+
+.btn-error {
+  background: linear-gradient(135deg, var(--error), #dc2626);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 4px 15px var(--error-glow);
+}
+
+.btn-error:hover:not(:disabled) {
+  box-shadow: 0 6px 25px var(--error-glow);
+}
+
 /* ============ Progress bar ============ */
 .progress-bar-container {
   width: 100%;

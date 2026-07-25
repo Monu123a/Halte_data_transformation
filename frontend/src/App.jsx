@@ -16,6 +16,8 @@ export default function App() {
   const [previewData, setPreviewData] = useState([]);
   const [outputFile, setOutputFile] = useState('');
   const [auditFile, setAuditFile] = useState('');
+  const [requirementFile, setRequirementFile] = useState('');
+  const [duplicateFile, setDuplicateFile] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
@@ -38,6 +40,8 @@ export default function App() {
       setWarnings(data.warnings || []);
       setOutputFile(data.output_filename || '');
       setAuditFile(data.audit_filename || '');
+      setRequirementFile(data.requirement_filename || '');
+      setDuplicateFile(data.duplicate_filename || '');
       setSuccess(true);
     } catch (err) {
       setWarnings([{ level: 'CRITICAL', message: 'Transform request failed: ' + err.message }]);
@@ -87,6 +91,16 @@ export default function App() {
     document.body.removeChild(a);
   };
 
+  const handleDownloadGeneric = (filename) => {
+    if (!filename) return;
+    const a = document.createElement('a');
+    a.href = `${API}/api/download/${filename}`;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
   const handleReset = async () => {
     try { await fetch(`${API}/api/reset`, { method: 'DELETE' }); } catch {}
     setUploadedFiles([]);
@@ -96,6 +110,8 @@ export default function App() {
     setPreviewData([]);
     setOutputFile('');
     setAuditFile('');
+    setRequirementFile('');
+    setDuplicateFile('');
     setSuccess(false);
   };
 
@@ -126,7 +142,7 @@ export default function App() {
         </button>
         <button
           className="btn btn-success"
-          onClick={handleDownload}
+          onClick={() => handleDownloadGeneric(outputFile)}
           disabled={!outputFile}
         >
           📥 Download Output
@@ -134,9 +150,25 @@ export default function App() {
         {auditFile && (
           <button
             className="btn btn-warning"
-            onClick={handleDownloadAudit}
+            onClick={() => handleDownloadGeneric(auditFile)}
           >
             📋 Download Audit Report
+          </button>
+        )}
+        {requirementFile && (
+          <button
+            className="btn btn-info"
+            onClick={() => handleDownloadGeneric(requirementFile)}
+          >
+            📦 Download Stock Required
+          </button>
+        )}
+        {duplicateFile && (
+          <button
+            className="btn btn-error"
+            onClick={() => handleDownloadGeneric(duplicateFile)}
+          >
+            ⚠️ Download Duplicate Orders
           </button>
         )}
         <button className="btn btn-danger" onClick={handleReset}>
