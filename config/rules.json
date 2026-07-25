@@ -36,9 +36,7 @@
   },
   "LocationFilter": {
     "enabled": true,
-    "allowed_states": [
-      "Chandigarh"
-    ],
+    "allowed_states": [],
     "filter_column": "Bill From State"
   },
   "DefaultInjector": {

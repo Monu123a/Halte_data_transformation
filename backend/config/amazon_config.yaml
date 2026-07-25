@@ -1,0 +1,9 @@
+amazon:
+  report_type: GET_FLAT_FILE_ALL_ORDERS_DATA_BY_ORDER_DATE_GENERAL
+  marketplace_id: A21TJRUUN4KGV # Example: India Marketplace
+  
+scheduler:
+  run_time: "02:00"
+
+storage:
+  reports_path: reports

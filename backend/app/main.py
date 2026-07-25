@@ -18,6 +18,7 @@ from app.repositories.lookup_repository import LookupRepository
 from app.engines.transformation import TransformationEngine
 from app.engines.validation import ValidationEngine
 from app.plugins.plugin_registry import PluginRegistry
+from app.services.transformation_service import TransformationService
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -47,6 +48,14 @@ lookup_repo = LookupRepository(base_dir=LOOKUP_DIR)
 plugin_registry = PluginRegistry()
 transformation_engine = TransformationEngine(registry=plugin_registry)
 validation_engine = ValidationEngine()
+
+transformation_service = TransformationService(
+    transformation_engine=transformation_engine,
+    validation_engine=validation_engine,
+    config_repo=config_repo,
+    output_dir=OUTPUT_DIR,
+    logs_dir=LOGS_DIR,
+)
 
 # ---------------------------------------------------------------------------
 # FastAPI
@@ -88,6 +97,7 @@ class StatsResponse(BaseModel):
 class TransformResponse(BaseModel):
     output_filename: str = ""
     audit_filename: str = ""
+    requirement_filename: str = ""
     stats: StatsResponse
     warnings: list
     message: str = ""
@@ -143,50 +153,7 @@ def _read_uploaded_files(filenames: List[str]) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True)
 
 
-def _save_manifest(context: ExecutionContext, filenames: List[str], output_filename: str):
-    run_id = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    run_dir = os.path.join(LOGS_DIR, run_id)
-    os.makedirs(run_dir, exist_ok=True)
 
-    manifest = {
-        "run_id": run_id,
-        "input_files": filenames,
-        "output_file": output_filename,
-        "mapping_version": "1.0",
-        "rules_version": "1.0",
-        "lookup_version": "1.0",
-        "stats": context.statistics.model_dump(),
-        "warnings": [w.model_dump() for w in context.warnings],
-    }
-    with open(os.path.join(run_dir, "manifest.json"), "w") as f:
-        json.dump(manifest, f, indent=2, default=str)
-
-    # Save config snapshot
-    shutil.copy(os.path.join(CONFIG_DIR, "rules.json"), os.path.join(run_dir, "rules.json"))
-    shutil.copy(os.path.join(CONFIG_DIR, "mapping.json"), os.path.join(run_dir, "mapping.json"))
-
-    logger.info("Manifest saved to %s", run_dir)
-
-
-def _save_audit_report(context: ExecutionContext, ts: str) -> str:
-    if not context.warnings:
-        return ""
-    
-    data = []
-    for w in context.warnings:
-        data.append({
-            "Level": w.level.value if hasattr(w.level, "value") else str(w.level),
-            "Message": w.message,
-            "Row Index": w.row_index if w.row_index is not None else "",
-            "Column": w.column if w.column is not None else ""
-        })
-    
-    df = pd.DataFrame(data)
-    audit_filename = f"audit_report_{ts}.xlsx"
-    audit_path = os.path.join(OUTPUT_DIR, audit_filename)
-    df.to_excel(audit_path, index=False, engine="openpyxl")
-    logger.info("Audit report saved: %s", audit_path)
-    return audit_filename
 
 
 # ---------------------------------------------------------------------------
@@ -223,33 +190,10 @@ async def transform(body: dict):
     context = _build_context()
     context.current_data = _read_uploaded_files(filenames)
 
-    # Run pipeline
-    transformation_engine.execute_pipeline(context)
+    # Run pipeline via service
+    output_filename, audit_filename, result_dict = transformation_service.process(context, filenames)
 
-    # Run validation (before column mapper removes some columns)
-    # Note: validation runs on the already-transformed data
-    validation_engine.validate(context)
-
-    # Generate output filename
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_filename = f"logic_erp_output_{ts}.xlsx"
-    output_path = os.path.join(OUTPUT_DIR, output_filename)
-
-    if context.current_data is not None:
-        context.current_data.to_excel(output_path, index=False, engine="openpyxl")
-        logger.info("Output saved: %s (%d rows)", output_path, len(context.current_data))
-
-    audit_filename = _save_audit_report(context, ts)
-
-    _save_manifest(context, filenames, output_filename)
-
-    return TransformResponse(
-        output_filename=output_filename,
-        audit_filename=audit_filename,
-        stats=StatsResponse(**context.statistics.model_dump()),
-        warnings=[w.model_dump() for w in context.warnings],
-        message="Transformation completed successfully.",
-    )
+    return TransformResponse(**result_dict)
 
 
 @app.post("/api/dry-run")
