@@ -101,6 +101,7 @@
     "Irn Date",
     "Irn Error Code",
     "MEM SHIP",
-    "TAX REGION"
+    "TAX REGION",
+    "ACCOUT CODE"
   ]
 }
