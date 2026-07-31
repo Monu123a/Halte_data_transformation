@@ -45,7 +45,18 @@ class TransformationService:
         output_path = os.path.join(self.output_dir, output_filename)
 
         if context.current_data is not None:
-            context.current_data.to_excel(output_path, index=False, engine="openpyxl")
+            df = context.current_data
+            for col in df.columns:
+                if pd.api.types.is_datetime64_any_dtype(df[col]):
+                    df[col] = df[col].dt.strftime('%Y/%m/%d %H:%M:%S').str.replace(' 00:00:00', '')
+                elif df[col].dtype == 'object':
+                    df[col] = df[col].apply(
+                        lambda x: x.strftime('%Y/%m/%d %H:%M:%S').replace(' 00:00:00', '') if isinstance(x, datetime)
+                        else x.strftime('%Y/%m/%d') if type(x).__name__ == 'date'
+                        else x.strftime('%H:%M:%S') if type(x).__name__ == 'time'
+                        else x
+                    )
+            df.to_excel(output_path, index=False, engine="openpyxl")
             logger.info("Output saved: %s (%d rows)", output_path, len(context.current_data))
 
         audit_filename = self._save_audit_report(context, ts)

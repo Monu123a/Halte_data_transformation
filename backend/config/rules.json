@@ -5,6 +5,7 @@
     "LocationFilter",
     "SkuTrim",
     "AccountCodeMapper",
+    "SkuMasterMapper",
     "DefaultInjector",
     "ColumnMapper"
   ],
@@ -45,5 +46,13 @@
   },
   "ColumnMapper": {
     "enabled": true
+  },
+  "SkuMasterMapper": {
+    "enabled": true,
+    "amazon_key": "sku",
+    "master_key": "ITEM CODE",
+    "fields_to_map": {
+      "TAX-1(%)": "igst_tax"
+    }
   }
 }
