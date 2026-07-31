@@ -30,8 +30,9 @@
     "enabled": true,
     "master_key": "ITEM CODE",
     "amazon_key": "Sku",
+    "divide_by_100": true,
     "fields_to_map": {
-      "TAX-1(%)": "igst_tax"
+      "TAX-1(%)": "Igst Rate"
     }
   },
   "LocationFilter": {

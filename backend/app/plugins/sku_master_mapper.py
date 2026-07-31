@@ -96,6 +96,13 @@ class SkuMasterMapperPlugin(BasePlugin):
                 val = l_dict.get(sku_val, "")
                 if pd.isna(val):
                     val = ""
+                    
+                if cfg.get("divide_by_100", False) and val != "":
+                    try:
+                        val = float(val) / 100.0
+                    except ValueError:
+                        pass
+                        
                 df.at[idx, dest_field] = val
                 
                 # Check for missing GST specifically, as requested
