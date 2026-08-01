@@ -48,12 +48,12 @@ class TransformationService:
             df = context.current_data
             for col in df.columns:
                 if pd.api.types.is_datetime64_any_dtype(df[col]):
-                    df[col] = df[col].dt.strftime('%Y/%m/%d %H:%M:%S').str.replace(' 00:00:00', '')
+                    df[col] = df[col].dt.strftime('%d/%m/%Y %H:%M').str.replace(' 00:00', '')
                 elif df[col].dtype == 'object':
                     df[col] = df[col].apply(
-                        lambda x: x.strftime('%Y/%m/%d %H:%M:%S').replace(' 00:00:00', '') if isinstance(x, datetime)
-                        else x.strftime('%Y/%m/%d') if type(x).__name__ == 'date'
-                        else x.strftime('%H:%M:%S') if type(x).__name__ == 'time'
+                        lambda x: x.strftime('%d/%m/%Y %H:%M').replace(' 00:00', '') if isinstance(x, datetime)
+                        else x.strftime('%d/%m/%Y') if type(x).__name__ == 'date'
+                        else x.strftime('%H:%M') if type(x).__name__ == 'time'
                         else x
                     )
             df.to_excel(output_path, index=False, engine="openpyxl")
